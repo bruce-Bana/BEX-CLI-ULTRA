@@ -38,3 +38,5 @@ test('secret files are ignored', () => {
   assert.match(ignore, /\.env/);
   assert.match(ignore, /node_modules/);
 });
+
+// CI rerun after shell-approval syntax correction.
