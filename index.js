@@ -203,10 +203,11 @@ function promptUser() {
 }
 
 function runSandboxed(code) {
+  console.log(chalk.yellow('WARNING: Node vm is not a security boundary. Do not run untrusted code here.'));
   const sandbox = { console: { log: (...args) => console.log(chalk.gray('[sandbox]'), ...args) } };
   const context = vm.createContext(sandbox);
   const script = new vm.Script(code, { timeout: 2000 });
-  return script.runInContext(context);
+  return script.runInContext(context, { timeout: 2000 });
 }
 
 // Command Handlers
@@ -421,7 +422,7 @@ const commands = {
     const cmd = args.join(' ');
     const spinner = ora('Executing...').start();
     try {
-      const { stdout, stderr } = await execAsync(cmd);
+      const { stdout, stderr } = await execAsync(cmd, { timeout: 120000, maxBuffer: 5 * 1024 * 1024, windowsHide: true });
       spinner.stop();
       if (stdout) console.log(stdout);
       if (stderr) console.error(chalk.red(stderr));
@@ -1038,11 +1039,9 @@ async function handleInput(line, isSystemPrompt = false) {
         try {
           const plan = JSON.parse(response);
           if (Array.isArray(plan)) {
-            console.log(chalk.cyan('Detected plan. Executing...'));
-            for (const step of plan) {
-              console.log(chalk.gray(`> ${step}`));
-              await handleInput(step);
-            }
+            console.log(chalk.yellow('Detected a model-generated plan. It will NOT be executed automatically.'));
+            plan.slice(0, 20).forEach((step, i) => console.log(chalk.gray(`${i + 1}. ${String(step).slice(0, 500)}`)));
+            console.log(chalk.cyan('Review each step, then run commands manually.'));
           }
         } catch (e) { /* Not a JSON plan */ }
       }
@@ -1055,8 +1054,17 @@ async function handleInput(line, isSystemPrompt = false) {
 }
 
 if (fs.existsSync(MEMORY_FILE)) {
-  history = JSON.parse(fs.readFileSync(MEMORY_FILE, 'utf8'));
-  console.log(chalk.gray('Restored agent memory.'));
+  try {
+    const saved = JSON.parse(fs.readFileSync(MEMORY_FILE, 'utf8'));
+    if (Array.isArray(saved)) {
+      history = saved.filter(item => item && typeof item.content === 'string' && ['user', 'model', 'system'].includes(item.role)).slice(-200);
+      console.log(chalk.gray(`Restored ${history.length} conversation entries.`));
+    } else {
+      console.warn(chalk.yellow('Memory file has an unexpected format; starting with empty history.'));
+    }
+  } catch (error) {
+    console.warn(chalk.yellow(`Could not restore memory (${error.message}); starting with empty history.`));
+  }
 }
 
 // Startup Sequence
