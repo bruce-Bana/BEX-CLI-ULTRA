@@ -28,7 +28,7 @@ Do not commit or share `.env`. At least one key is needed for AI responses:
 
 Use `/help` in the app for the complete command list. Core commands include `/task <goal>`, `/provider [google|deepseek|auto]`, `/ls`, `/read`, `/grep`, `/glob`, `/project`, `/git status`, `/browser`, `/google <query>`, `/visit <url>`, `/mcp_list`, and `/status`.
 
-## Diagnostics and tests
+## Agentic features\n\n- `/plan <goal>` asks the model for a plan without executing it.\n- `/permissions ask|readonly|trusted` controls approvals; `ask` is the default.\n- `/checkpoint save <file>`, `/checkpoint list`, and `/checkpoint restore <id>` manage file backups.\n- `/agents` lists specialist profiles; `/skills [name]` lists or reads reusable workflows.\n- `/review`, `/test`, `/doctor`, and `/hooks` support review and verification.\n- `AGENTS.md` supplies project instructions; profiles live in `.bex/agents/` and `.bex/skills/`.\n\nTrusted mode bypasses confirmation and should only be used in a disposable, trusted environment. The denylist is not a complete sandbox.\n\n## Diagnostics and tests
 
 ```bat
 npm run check
