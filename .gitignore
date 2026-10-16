@@ -10,3 +10,4 @@ downloads/
 *.log
 .DS_Store
 Thumbs.db
+.bex/checkpoints/\n.bex/logs/\n
