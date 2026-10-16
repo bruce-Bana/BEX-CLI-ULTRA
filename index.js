@@ -539,13 +539,17 @@ const commands = {
   },
   '/exec': async (args) => {
     const cmd = args.join(' ');
-    if (!cmd) return console.log(chalk.red('Usage: /exec <command>'));\n    if (!(await approveShellCommand(cmd))) return console.log(chalk.gray('Command cancelled.'));\n    const spinner = ora('Executing...').start();
+    if (!cmd) return console.log(chalk.red('Usage: /exec <command>'));
+    if (!(await approveShellCommand(cmd))) return console.log(chalk.gray('Command cancelled.'));
+    const spinner = ora('Executing...').start();
     try {
       const { stdout, stderr } = await execAsync(cmd, { timeout: 120000, maxBuffer: 5 * 1024 * 1024, windowsHide: true });
       spinner.stop();
       if (stdout) console.log(stdout);
       if (stderr) console.error(chalk.red(stderr));
-      history.push({ role: 'system', content: `Command '${cmd}' output:\n${stdout}\n${stderr}` });
+      history.push({ role: 'system', content: `Command '${cmd}' output:
+${stdout}
+${stderr}` });
     } catch (e) {
       spinner.stop();
       console.log(chalk.red(e.message));
