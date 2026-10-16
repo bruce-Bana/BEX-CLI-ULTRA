@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "permissions": "ask",
+  "agent": {
+    "maxSteps": 12,
+    "maxOutputChars": 12000,
+    "retryLimit": 2
+  },
+  "checkpoints": {
+    "directory": ".bex/checkpoints",
+    "maxCount": 20
+  },
+  "hooks": {
+    "beforeCommand": true,
+    "afterCommand": true
+  }
+}
