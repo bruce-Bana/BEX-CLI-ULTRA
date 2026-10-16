@@ -1,37 +1,61 @@
-
 # BEX CLI ULTRA
 
-## Features
-- **AI Core**: Google Gemini 2.5 Flash & DeepSeek integration.
-- **System Control**: File system ops, Git, Process execution.
-- **Web Automation**: Puppeteer-based browsing and extraction.
-- **Agentic Mode**: Autonomous task planning and execution (`/task`).
-- **Resilience**: Daemon mode (`--daemon`), Watchdog self-healing, and Sandbox execution (`/sandbox`).
-- **Extensibility**: Model Context Protocol (MCP) support.
+BEX CLI ULTRA is a Node.js terminal assistant with Gemini and DeepSeek providers, file/project utilities, Git inspection, browser automation, optional MCP connections, and a bounded experimental agent workflow.
+
+## Windows quick install
+
+1. Install **Node.js 20 or newer** from https://nodejs.org/.
+2. Download this repository ZIP and extract it, or clone it with Git.
+3. Double-click `install.bat`.
+4. Add your API key to the local `.env` file when prompted.
+5. Run `run.bat`.
+
+Or from a terminal:
+
+```bat
+npm install
+copy .env.example .env
+notepad .env
+npm run doctor
+npm start
+```
+
+Do not commit or share `.env`. At least one key is needed for AI responses:
+- `GOOGLE_API_KEY`
+- `DEEPSEEK_API_KEY`
 
 ## Commands
-- `/help`         → Show all commands
-- `/menu`         → Show categorized command menu
-- `/task <goal>`  → Start autonomous agent
-- `/sandbox <js>` → Run JavaScript in a secure VM sandbox
-- `/browser`      → Launch web browser automation
-- `/google <q>`   → Search Google
-- `/visit <url>`  → Visit a website
-- `/project`      → Analyze project structure
-- `/git <cmd>`    → Git operations (status, log, diff)
-- `/quit`         → Exit CLI
-(See `/help` for the full list of 30+ commands)
 
-## Run
-```bash
-# Interactive Mode
-node index.js
+Use `/help` in the app for the complete command list. Core commands include `/task <goal>`, `/provider [google|deepseek|auto]`, `/ls`, `/read`, `/grep`, `/glob`, `/project`, `/git status`, `/browser`, `/google <query>`, `/visit <url>`, `/mcp_list`, and `/status`.
 
-# Daemon Mode
-node index.js --daemon
+## Diagnostics and tests
+
+```bat
+npm run check
+npm test
+npm run doctor
 ```
 
-## Example Sandbox
-```text
-/sandbox console.log("Hello from sandbox")
-```
+The diagnostics command checks the Node version, project files, dependencies, and whether a key appears configured. It never prints key values.
+
+## Safety notes
+
+- AI output is untrusted input. Review commands before running them.
+- Shell execution can modify files and access the network. Use least-privilege accounts.
+- The JavaScript `vm` sandbox is **not** secure isolation for untrusted code. The `/sandbox` command is only a convenience for trusted snippets.
+- Model-generated JSON plans are displayed for review instead of being executed automatically.
+- Only connect MCP servers you trust. See [SECURITY.md](SECURITY.md).
+
+## Project files
+
+- `index.js` — CLI application
+- `install.bat` — Windows dependency installer
+- `run.bat` — syntax-check and launch helper
+- `doctor.js` — local setup diagnostics
+- `test/smoke.test.js` — Node built-in smoke tests
+- `.env.example` — safe environment template
+- `SECURITY.md` — security and execution guidance
+
+## Current limitations
+
+This project remains an evolving personal tool, not a hardened autonomous operating system. Browser/MCP features depend on the configured environment and server protocol. Validate changes and keep backups before allowing any agent to write or delete important files.
