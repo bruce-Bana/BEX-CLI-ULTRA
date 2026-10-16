@@ -463,7 +463,8 @@ const commands = {
     if (!args[0]) return console.log(chalk.red('❌ Usage: /delete <file>'));
     const file = args[0];
 
-    if (permissionsMode === 'readonly') return console.log(chalk.red('File deletion is disabled in read-only mode.'));\n    // Check if file exists
+    if (permissionsMode === 'readonly') return console.log(chalk.red('File deletion is disabled in read-only mode.'));
+    // Check if file exists
     try {
       await fs.promises.access(file);
     } catch (e) {
@@ -471,7 +472,8 @@ const commands = {
     }
 
     // Confirmation prompt with better styling
-    console.log(chalk.yellow(`\n⚠️  WARNING: This will permanently delete '${chalk.bold(file)}'`));
+    console.log(chalk.yellow(`
+⚠️  WARNING: This will permanently delete '${chalk.bold(file)}'`));
     const rlConfirm = readline.createInterface({ input: process.stdin, output: process.stdout });
     rlConfirm.question(chalk.red('Are you sure? Type the filename to confirm: '), async (answer) => {
       rlConfirm.close();
@@ -489,7 +491,10 @@ const commands = {
       promptUser();
     });
   },
-  '/rename': async (args) => {\n    if (args.length < 2) return console.log(chalk.red('Usage: /rename <old> <new>'));\n    if (permissionsMode === 'readonly') return console.log(chalk.red('File changes are disabled in read-only mode.'));\n    if (!(await askApproval(`Rename ${path.resolve(args[0])} to ${path.resolve(args[1])}`))) return console.log(chalk.gray('Rename cancelled.'));
+  '/rename': async (args) => {
+    if (args.length < 2) return console.log(chalk.red('Usage: /rename <old> <new>'));
+    if (permissionsMode === 'readonly') return console.log(chalk.red('File changes are disabled in read-only mode.'));
+    if (!(await askApproval(`Rename ${path.resolve(args[0])} to ${path.resolve(args[1])}`))) return console.log(chalk.gray('Rename cancelled.'));
     if (args.length < 2) return console.log(chalk.red('Usage: /rename <old> <new>'));
     try {
       await fs.promises.rename(args[0], args[1]);
@@ -502,10 +507,12 @@ const commands = {
     await fs.promises.writeFile(file, content);
     console.log(chalk.green(`Saved history to ${file}`));
   },
-  '/download': async (args) => {\n    if (permissionsMode === 'readonly') return console.log(chalk.red('Downloads are disabled in read-only mode.'));
+  '/download': async (args) => {
+    if (permissionsMode === 'readonly') return console.log(chalk.red('Downloads are disabled in read-only mode.'));
     if (!args[0]) return console.log(chalk.red('Usage: /download <url> [filename]'));
     const url = args[0];
-    const filename = args[1] || path.basename(url) || 'downloaded-file';\n    if (!(await askApproval(`Download from ${url} and write to ${path.resolve(filename)}`))) return console.log(chalk.gray('Download cancelled.'));
+    const filename = args[1] || path.basename(url) || 'downloaded-file';
+    if (!(await askApproval(`Download from ${url} and write to ${path.resolve(filename)}`))) return console.log(chalk.gray('Download cancelled.'));
     try {
       const res = await fetch(url);
       const buffer = await res.arrayBuffer();
