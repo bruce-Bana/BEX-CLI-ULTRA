@@ -1,15 +1,17 @@
-
 {
   "name": "bex-cli-ultra",
-  "version": "1.0.0",
-  "description": "BEX CLI ULTRA – Sandbox + Watchdog + Daemon + Auto-Reconnect + AI Assistant",
+  "version": "1.1.0",
+  "description": "BEX CLI ULTRA — AI terminal agent with guarded execution, diagnostics and Windows setup",
   "main": "index.js",
   "type": "module",
   "bin": {
     "bex": "index.js"
   },
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "check": "node --check index.js && node --check doctor.js",
+    "doctor": "node doctor.js",
+    "test": "node --test"
   },
   "dependencies": {
     "@google/generative-ai": "^0.2.0",
@@ -25,5 +27,16 @@
     "openai": "^4.28.0",
     "ora": "^8.0.1",
     "puppeteer": "^22.0.0"
-  }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "ai",
+    "cli",
+    "agent",
+    "gemini",
+    "deepseek",
+    "developer-tools"
+  ]
 }
