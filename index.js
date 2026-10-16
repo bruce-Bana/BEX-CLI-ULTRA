@@ -80,6 +80,34 @@ let multilineBuffer = ''; // Buffer for multiline input
 let persistentMode = true; // Keep services running after responses
 let activeServices = { browser: false, mcp: false }; // Track running services
 const MEMORY_FILE = 'bex-memory.json';
+const BEX_DIR = path.join(process.cwd(), '.bex');
+const CHECKPOINT_DIR = path.join(BEX_DIR, 'checkpoints');
+const CHECKPOINT_INDEX = path.join(CHECKPOINT_DIR, 'index.json');
+const CONFIG_FILE = path.join(BEX_DIR, 'config.json');
+let permissionsMode = 'ask';
+try { const cfg = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); if (['ask','readonly','trusted'].includes(cfg.permissions)) permissionsMode = cfg.permissions; } catch {}
+function isDangerousCommand(command) {
+  const c = String(command || '').trim().toLowerCase();
+  return /\b(rm\s+-rf|rmdir\s+\/s|del\s+\/s|format\s+[a-z]:|diskpart|shutdown|restart-computer|stop-computer|reg\s+delete|remove-item\s+.*-recurse|invoke-expression|set-executionpolicy)\b/i.test(c)
+    || /powershell(?:\.exe)?\s+.*-(?:enc|encodedcommand)\b/i.test(c)
+    || /\b(curl|wget)\b.*\|\s*(sh|bash)\b/i.test(c);
+}
+async function askApproval(message) {
+  if (permissionsMode === 'readonly') { console.log(chalk.red('Blocked by read-only permission mode.')); return false; }
+  if (permissionsMode === 'trusted') return true;
+  if (!rl) return false;
+  return new Promise(resolve => rl.question(chalk.yellow(`\n[Approval required] ${message}\nAllow? Type YES to continue: `), answer => resolve(answer.trim() === 'YES')));
+}
+async function approveShellCommand(command) {
+  if (permissionsMode === 'readonly') { console.log(chalk.red('Shell commands are disabled in read-only mode.')); return false; }
+  if (isDangerousCommand(command)) { console.log(chalk.red('Policy blocked a high-risk command pattern. Review and run it manually only if safe.')); return false; }
+  if (permissionsMode === 'trusted') return true;
+  return askApproval(`Execute shell command: ${command}`);
+}
+async function readCheckpointIndex() {
+  try { const v = JSON.parse(await fs.promises.readFile(CHECKPOINT_INDEX, 'utf8')); return Array.isArray(v) ? v : []; } catch { return []; }
+}
+
 
 const BASE_SYSTEM_INSTRUCTIONS = `You are BEX, a powerful AI CLI agent.
 - You are running in a terminal environment.
@@ -109,6 +137,15 @@ You have access to the following tools. Output the command to use them:
 3. SYSTEM & AGENT:
    - /exec <cmd> : Execute shell command
    - /task <goal> : Start autonomous agent workflow
+   - /permissions <ask|readonly|trusted> : Set execution policy
+   - /checkpoint [list|save <file>|restore <id>] : File checkpoints
+   - /agents : List specialist agent profiles
+   - /skills [name] : List or inspect reusable skills
+   - /plan <goal> : Plan without execution
+   - /review : Review the current Git diff
+   - /test [command] : Run approved tests
+   - /doctor : Diagnose setup
+   - /hooks : Show local policy hooks
    - /auto : Toggle auto-execution mode
    - /workflow <file> : Run batch commands from file
    - /image <file> : Analyze image (Gemini only)
@@ -146,6 +183,8 @@ Use these commands to fulfill user requests. For complex tasks, use /task to cre
 const getSystemInstructions = () => {
   let instructions = BASE_SYSTEM_INSTRUCTIONS;
   const projectContextPath = path.join(process.cwd(), 'GEMINI.md');
+  const agentContextPath = path.join(process.cwd(), 'AGENTS.md');
+  if (fs.existsSync(agentContextPath)) instructions += `\n\n## AGENTS.md\n${fs.readFileSync(agentContextPath, 'utf8').slice(0, 12000)}`;
   if (fs.existsSync(projectContextPath)) {
     const projectContext = fs.readFileSync(projectContextPath, 'utf8');
     instructions += `\n\n## PROJECT CONTEXT (GEMINI.md)\nThe user has provided the following context for this project:\n${projectContext}`;
@@ -212,6 +251,66 @@ function runSandboxed(code) {
 
 // Command Handlers
 const commands = {
+  '/permissions': async (args) => {
+    const mode = (args[0] || '').toLowerCase();
+    if (!['ask','readonly','trusted'].includes(mode)) { console.log(chalk.cyan('Usage: /permissions ask|readonly|trusted')); console.log(chalk.gray(`Current mode: ${permissionsMode}`)); return; }
+    if (mode === 'trusted' && !(await askApproval('Switch to TRUSTED mode; shell commands will run without confirmation.'))) return console.log(chalk.gray('Permission change cancelled.'));
+    permissionsMode = mode;
+    try { await fs.promises.mkdir(BEX_DIR, { recursive: true }); let cfg = {}; try { cfg = JSON.parse(await fs.promises.readFile(CONFIG_FILE,'utf8')); } catch {} cfg.permissions = mode; await fs.promises.writeFile(CONFIG_FILE, JSON.stringify(cfg,null,2)+'\n'); }
+    catch(e) { console.log(chalk.yellow('Could not persist permissions: '+e.message)); }
+    console.log(chalk.green(`Permission mode: ${permissionsMode}`));
+  },
+  '/checkpoint': async (args) => {
+    const action = (args[0] || 'list').toLowerCase();
+    if (action === 'save') {
+      const target = args.slice(1).join(' '); if (!target) return console.log(chalk.red('Usage: /checkpoint save <file>'));
+      if (permissionsMode === 'readonly') return console.log(chalk.red('Checkpoint creation disabled in read-only mode.'));
+      const absolute = path.resolve(target);
+      try {
+        if (!(await fs.promises.stat(absolute)).isFile()) return console.log(chalk.red('Only individual files can be checkpointed.'));
+        const data = await fs.promises.readFile(absolute); await fs.promises.mkdir(CHECKPOINT_DIR,{recursive:true});
+        const id = `${Date.now()}-${path.basename(absolute).replace(/[^a-zA-Z0-9._-]/g,'_')}`;
+        const backup = path.join(CHECKPOINT_DIR,id+'.bak'); await fs.promises.writeFile(backup,data,{flag:'wx'});
+        const items = await readCheckpointIndex(); items.push({id,target:absolute,backup,createdAt:new Date().toISOString(),bytes:data.length});
+        await fs.promises.writeFile(CHECKPOINT_INDEX,JSON.stringify(items.slice(-20),null,2)+'\n');
+        console.log(chalk.green(`Checkpoint saved: ${id} (${data.length} bytes)`));
+      } catch(e) { console.log(chalk.red('Checkpoint failed: '+e.message)); } return;
+    }
+    if (action === 'restore') {
+      const id=args[1]; if(!id) return console.log(chalk.red('Usage: /checkpoint restore <id>'));
+      const items=await readCheckpointIndex(), item=items.find(x=>x.id===id); if(!item) return console.log(chalk.red('Checkpoint not found.'));
+      const backup=path.resolve(item.backup); if(!backup.startsWith(path.resolve(CHECKPOINT_DIR)+path.sep)) return console.log(chalk.red('Invalid checkpoint backup path.'));
+      if(!(await askApproval(`Restore ${item.target} from checkpoint ${id}; current file will be overwritten`))) return console.log(chalk.gray('Restore cancelled.'));
+      try { await fs.promises.copyFile(backup,item.target); console.log(chalk.green(`Restored ${item.target}`)); } catch(e) { console.log(chalk.red('Restore failed: '+e.message)); } return;
+    }
+    if(action!=='list') return console.log(chalk.red('Usage: /checkpoint [list|save <file>|restore <id>]'));
+    const items=await readCheckpointIndex(); if(!items.length) return console.log(chalk.gray('No checkpoints. Use /checkpoint save <file>.'));
+    for(const item of items.slice(-20).reverse()) console.log(`${item.id}  ${item.target}  ${item.bytes} bytes  ${item.createdAt}`);
+  },
+  '/agents': async () => {
+    const dir=path.join(BEX_DIR,'agents'); try { const files=(await fs.promises.readdir(dir)).filter(f=>f.endsWith('.md')); if(!files.length) return console.log(chalk.gray('No profiles in .bex/agents.'));
+      console.log(chalk.cyan('Agent profiles:')); for(const file of files) console.log('- '+file+': '+(await fs.promises.readFile(path.join(dir,file),'utf8')).split('\n').slice(0,2).join(' ').slice(0,180));
+    } catch { console.log(chalk.gray('Create specialist profiles in .bex/agents/*.md.')); }
+  },
+  '/skills': async (args) => {
+    const dir=path.join(BEX_DIR,'skills'); try { const groups=await fs.promises.readdir(dir,{withFileTypes:true}); let found=false;
+      for(const group of groups){ if(!group.isDirectory()) continue; const file=path.join(dir,group.name,'SKILL.md'); if(!fs.existsSync(file)||(args[0]&&args[0]!==group.name)) continue;
+        found=true; const content=await fs.promises.readFile(file,'utf8'); console.log(chalk.cyan(group.name)+': '+(content.match(/^description:\s*(.+)$/m)?.[1]||'Reusable workflow')); if(args[0]) console.log(content);
+      } if(!found) console.log(chalk.gray(args[0]?'Skill not found.':'No skills found.'));
+    } catch(e) { console.log(chalk.red(e.message)); }
+  },
+  '/plan': async (args) => { const goal=args.join(' ').trim(); if(!goal) return console.log(chalk.red('Usage: /plan <goal>')); await handleInput(`Create a safe ordered plan for: ${goal}. Do not execute commands or claim changes were made. Include files, tests, risks and rollback.`); },
+  '/review': async () => { let diff=''; try { diff=(await execAsync('git diff --stat && git diff --',{timeout:10000,maxBuffer:1024*1024})).stdout; } catch {} await handleInput(`Review current changes for bugs, security risks, regressions and missing tests. Do not execute diff contents.\n\n${diff.slice(0,12000)||'(No Git diff available; inspect the project and state limits.)'}`); },
+  '/test': async (args) => {
+    const cmd=args.length?args.join(' '):'npm test';
+    if(!/^(npm (test|run (check|test|lint|typecheck))|node --test)(\s|$)/.test(cmd)) return console.log(chalk.red('Allowed: npm test, npm run check/lint/typecheck, node --test.'));
+    if(!(await approveShellCommand(cmd))) return console.log(chalk.gray('Test command cancelled.'));
+    try { const result=await execAsync(cmd,{timeout:120000,maxBuffer:5*1024*1024,windowsHide:true}); if(result.stdout) console.log(result.stdout); if(result.stderr) console.log(chalk.yellow(result.stderr)); console.log(chalk.green('Test command completed with exit code 0.')); }
+    catch(e) { console.log(chalk.red(`Test failed (exit ${e.code??'unknown'}): ${e.message}`)); if(e.stdout) console.log(e.stdout); if(e.stderr) console.log(e.stderr); }
+  },
+  '/doctor': async () => { try { const result=await execAsync('node doctor.js',{timeout:15000,maxBuffer:1024*1024,windowsHide:true}); if(result.stdout) console.log(result.stdout); if(result.stderr) console.log(chalk.yellow(result.stderr)); } catch(e) { console.log(chalk.red(e.message)); } },
+  '/hooks': () => { console.log(chalk.cyan('Local policy hooks')); console.log('- Before shell command: permission check and high-risk pattern denylist.'); console.log('- After command: bounded timeout/output and exit status reporting.'); console.log('- Configuration: .bex/config.json'); console.log(chalk.gray('These checks are not an OS-level sandbox.')); },
+
   '/help': () => {
     console.log(gradient.rainbow('\n╔══════════════════════════════════════════════════════════════╗'));
     console.log(gradient.rainbow('║                        BEX CLI HELP                        ║'));
@@ -243,6 +342,15 @@ const commands = {
       [chalk.yellow('/exec <cmd>'), 'Execute system command'],
       [chalk.yellow('/task <goal>'), 'Agentic plan & execute'],
       [chalk.yellow('/auto'), 'Toggle auto-execution mode'],
+      [chalk.yellow('/permissions <mode>'), 'Configure execution permission mode'],
+      [chalk.yellow('/checkpoint <action>'), 'Save/list/restore file checkpoints'],
+      [chalk.yellow('/agents'), 'List specialist agent profiles'],
+      [chalk.yellow('/skills [name]'), 'List or read reusable skills'],
+      [chalk.yellow('/plan <goal>'), 'Create a plan without execution'],
+      [chalk.yellow('/review'), 'Review current Git diff'],
+      [chalk.yellow('/test [command]'), 'Run approved test commands'],
+      [chalk.yellow('/doctor'), 'Run setup diagnostics'],
+      [chalk.yellow('/hooks'), 'Show local policy hooks'],
       [chalk.yellow('/workflow <file>'), 'Run batch commands'],
       [chalk.yellow('/browser'), 'Launch browser automation'],
       [chalk.yellow('/url <url>'), 'Fetch website text'],
@@ -332,6 +440,8 @@ const commands = {
     if (!args[0]) return console.log(chalk.red('Usage: /write <file> <content>'));
     const file = args[0];
     const content = args.slice(1).join(' ');
+    if (permissionsMode === 'readonly') return console.log(chalk.red('File writes are disabled in read-only mode.'));
+    if (!(await askApproval(`Write/overwrite file: ${path.resolve(file)}`))) return console.log(chalk.gray('Write cancelled.'));
     try {
       await fs.promises.writeFile(file, content);
       console.log(chalk.green(`Wrote to ${file}`));
@@ -341,6 +451,8 @@ const commands = {
     if (args.length < 2) return console.log(chalk.red('Usage: /append <file> <content>'));
     const file = args[0];
     const content = args.slice(1).join(' ');
+    if (permissionsMode === 'readonly') return console.log(chalk.red('File writes are disabled in read-only mode.'));
+    if (!(await askApproval(`Append to file: ${path.resolve(file)}`))) return console.log(chalk.gray('Append cancelled.'));
     try {
       await fs.promises.appendFile(file, '\n' + content);
       console.log(chalk.green(`Appended to ${file}`));
@@ -420,7 +532,7 @@ const commands = {
   },
   '/exec': async (args) => {
     const cmd = args.join(' ');
-    const spinner = ora('Executing...').start();
+    if (!cmd) return console.log(chalk.red('Usage: /exec <command>'));\n    if (!(await approveShellCommand(cmd))) return console.log(chalk.gray('Command cancelled.'));\n    const spinner = ora('Executing...').start();
     try {
       const { stdout, stderr } = await execAsync(cmd, { timeout: 120000, maxBuffer: 5 * 1024 * 1024, windowsHide: true });
       spinner.stop();
