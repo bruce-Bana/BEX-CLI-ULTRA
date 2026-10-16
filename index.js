@@ -463,7 +463,7 @@ const commands = {
     if (!args[0]) return console.log(chalk.red('❌ Usage: /delete <file>'));
     const file = args[0];
 
-    // Check if file exists\n    if (permissionsMode === 'readonly') return console.log(chalk.red('File deletion is disabled in read-only mode.'));
+    if (permissionsMode === 'readonly') return console.log(chalk.red('File deletion is disabled in read-only mode.'));\n    // Check if file exists
     try {
       await fs.promises.access(file);
     } catch (e) {
@@ -489,7 +489,7 @@ const commands = {
       promptUser();
     });
   },
-  '/rename': async (args) => {\n    if (permissionsMode === 'readonly') return console.log(chalk.red('File changes are disabled in read-only mode.'));\n    if (!(await askApproval(`Rename ${path.resolve(args[0] || '.') } to ${path.resolve(args[1] || '.')}`))) return console.log(chalk.gray('Rename cancelled.'));
+  '/rename': async (args) => {\n    if (args.length < 2) return console.log(chalk.red('Usage: /rename <old> <new>'));\n    if (permissionsMode === 'readonly') return console.log(chalk.red('File changes are disabled in read-only mode.'));\n    if (!(await askApproval(`Rename ${path.resolve(args[0])} to ${path.resolve(args[1])}`))) return console.log(chalk.gray('Rename cancelled.'));
     if (args.length < 2) return console.log(chalk.red('Usage: /rename <old> <new>'));
     try {
       await fs.promises.rename(args[0], args[1]);
