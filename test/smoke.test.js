@@ -16,7 +16,10 @@ test('entry point exists and parses', () => {
   assert.ok(fs.existsSync(entry), 'index.js should exist');
   const source = fs.readFileSync(entry, 'utf8');
   assert.match(source, /handleInput/);
-  assert.match(source, /\/task/);\n  assert.match(source, /\/checkpoint/);\n  assert.match(source, /\/permissions/);\n  assert.match(source, /approveShellCommand/);
+  assert.match(source, /\/task/);
+  assert.match(source, /\/checkpoint/);
+  assert.match(source, /\/permissions/);
+  assert.match(source, /approveShellCommand/);
 });
 
 test('installer and launcher exist', () => {
@@ -24,7 +27,13 @@ test('installer and launcher exist', () => {
   assert.ok(fs.existsSync(path.join(root, 'run.bat')));
 });
 
-test('agent profiles and skills are present', () => {\n  assert.ok(fs.existsSync(path.join(root, 'AGENTS.md')));\n  assert.ok(fs.existsSync(path.join(root, '.bex', 'agents', 'code-reviewer.md')));\n  assert.ok(fs.existsSync(path.join(root, '.bex', 'skills', 'code-review', 'SKILL.md')));\n});\n\ntest('secret files are ignored', () => {
+test('agent profiles and skills are present', () => {
+  assert.ok(fs.existsSync(path.join(root, 'AGENTS.md')));
+  assert.ok(fs.existsSync(path.join(root, '.bex', 'agents', 'code-reviewer.md')));
+  assert.ok(fs.existsSync(path.join(root, '.bex', 'skills', 'code-review', 'SKILL.md')));
+});
+
+test('secret files are ignored', () => {
   const ignore = fs.readFileSync(path.join(root, '.gitignore'), 'utf8');
   assert.match(ignore, /\.env/);
   assert.match(ignore, /node_modules/);
