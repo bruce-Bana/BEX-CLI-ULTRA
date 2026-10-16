@@ -1,7 +1,7 @@
 {
   "name": "bex-cli-ultra",
-  "version": "1.1.0",
-  "description": "BEX CLI ULTRA — AI terminal agent with guarded execution, diagnostics and Windows setup",
+  "version": "1.2.0",
+  "description": "BEX CLI ULTRA — agentic terminal assistant with approvals, checkpoints and specialist workflows",
   "main": "index.js",
   "type": "module",
   "bin": {
@@ -39,4 +39,4 @@
     "deepseek",
     "developer-tools"
   ]
-}
+}\n
